@@ -43,7 +43,7 @@ export default function Captions() {
       try {
         const data = JSON.parse(str);
         if (data.type === 'caption') {
-          const identity = participant?.identity || 'Unknown';
+          const identity = participant?.name || participant?.identity || 'Unknown';
           
           // 1. Show original text immediately (for speed)
           setCaptions((prev) => {

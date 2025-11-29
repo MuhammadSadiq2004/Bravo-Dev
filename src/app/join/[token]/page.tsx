@@ -8,6 +8,9 @@ export default function JoinPage({ params }: { params: Promise<{ token: string }
   const router = useRouter();
   const [status, setStatus] = useState('Validating invite...');
   const [isError, setIsError] = useState(false);
+  const [roomName, setRoomName] = useState('');
+  const [name, setName] = useState('');
+  const [showNameInput, setShowNameInput] = useState(false);
 
   useEffect(() => {
     async function validate() {
@@ -16,9 +19,9 @@ export default function JoinPage({ params }: { params: Promise<{ token: string }
         const data = await res.json();
 
         if (res.ok && data.valid) {
-          setStatus('Invite valid! Joining room...');
-          // Redirect to call page with room name
-          router.push(`/call/${data.roomName}`);
+          setStatus('Invite valid!');
+          setRoomName(data.roomName);
+          setShowNameInput(true);
         } else {
           setIsError(true);
           setStatus(`Invalid invite: ${data.error || 'Unknown error'}`);
@@ -30,7 +33,14 @@ export default function JoinPage({ params }: { params: Promise<{ token: string }
       }
     }
     validate();
-  }, [token, router]);
+  }, [token]);
+
+  const handleJoin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name.trim()) {
+      router.push(`/call/${roomName}?name=${encodeURIComponent(name)}`);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -50,8 +60,30 @@ export default function JoinPage({ params }: { params: Promise<{ token: string }
           )}
         </div>
 
-        <h2 className="text-2xl font-bold mb-2">{isError ? 'Connection Failed' : 'Connecting...'}</h2>
+        <h2 className="text-2xl font-bold mb-2">{isError ? 'Connection Failed' : (showNameInput ? 'Welcome!' : 'Connecting...')}</h2>
         <p className={`text-sm ${isError ? 'text-red-300' : 'text-gray-400'}`}>{status}</p>
+
+        {showNameInput && (
+          <form onSubmit={handleJoin} className="mt-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2 text-left">Enter your name to join</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+                placeholder="Your Name"
+              />
+            </div>
+            <button 
+              type="submit"
+              className="w-full bg-white text-black font-bold py-3 px-4 rounded-lg hover:bg-gray-200 transition"
+            >
+              Join Call
+            </button>
+          </form>
+        )}
 
         {isError && (
           <button 

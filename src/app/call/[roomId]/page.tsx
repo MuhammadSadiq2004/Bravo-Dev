@@ -3,22 +3,32 @@
 import { useEffect, useState, use } from 'react';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import '@livekit/components-styles';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Captions from '@/components/Captions';
 import Reactions from '@/components/Reactions';
 
 export default function CallPage({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = use(params);
+  const searchParams = useSearchParams();
+  const name = searchParams.get('name') || 'Guest';
   const [token, setToken] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [inputName, setInputName] = useState('');
   const router = useRouter();
 
   useEffect(() => {
+    if (!name || name === 'Guest') {
+      setShowNameInput(true);
+      return;
+    }
+
     (async () => {
       try {
-        const identity = `user-${Math.random().toString(36).substring(7)}`;
+        // Use name in identity to make it recognizable but unique
+        const identity = `${name}-${Math.random().toString(36).substring(7)}`;
         const resp = await fetch(
-          `/api/livekit/token?room=${roomId}&identity=${identity}`
+          `/api/livekit/token?room=${roomId}&identity=${encodeURIComponent(identity)}&name=${encodeURIComponent(name)}`
         );
         const data = await resp.json();
         setToken(data.token);
@@ -26,10 +36,19 @@ export default function CallPage({ params }: { params: Promise<{ roomId: string 
         console.error(e);
       }
     })();
-  }, [roomId]);
+  }, [roomId, name]);
+
+  const handleJoin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputName.trim()) {
+      // Reload with name param to trigger the token fetch
+      router.push(`/call/${roomId}?name=${encodeURIComponent(inputName)}`);
+    }
+  };
 
   const copyLink = async () => {
-    const url = window.location.href;
+    // Copy only the base URL + path, excluding query params (like ?name=...)
+    const url = window.location.origin + window.location.pathname;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -40,6 +59,36 @@ export default function CallPage({ params }: { params: Promise<{ roomId: string 
   };
 
   if (!token) {
+    if (showNameInput) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="glass-panel p-8 rounded-2xl w-full max-w-md text-center relative overflow-hidden">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-32 bg-purple-600/20 rounded-full blur-3xl -z-10"></div>
+            <h2 className="text-2xl font-bold mb-2">Join Call</h2>
+            <p className="text-gray-400 text-sm mb-6">Please enter your name to join.</p>
+            <form onSubmit={handleJoin} className="space-y-4">
+              <div>
+                <input
+                  type="text"
+                  required
+                  value={inputName}
+                  onChange={(e) => setInputName(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+                  placeholder="Your Name"
+                />
+              </div>
+              <button 
+                type="submit"
+                className="w-full bg-white text-black font-bold py-3 px-4 rounded-lg hover:bg-gray-200 transition"
+              >
+                Join Room
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="glass-panel p-8 rounded-2xl flex flex-col items-center gap-4">

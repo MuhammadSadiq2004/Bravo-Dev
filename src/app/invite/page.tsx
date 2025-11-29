@@ -5,6 +5,7 @@ import Link from "next/link";
 
 export default function InvitePage() {
   const [emails, setEmails] = useState<string[]>([""]);
+  const [name, setName] = useState("");
   const [lang, setLang] = useState("en");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -31,7 +32,9 @@ export default function InvitePage() {
   const copyToClipboard = async () => {
     if (!joinLink) return;
     try {
-      const fullUrl = window.location.origin + joinLink;
+      // Strip query params (like ?name=...) before copying
+      const cleanLink = joinLink.split('?')[0];
+      const fullUrl = window.location.origin + cleanLink;
       await navigator.clipboard.writeText(fullUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -47,6 +50,11 @@ export default function InvitePage() {
     const validEmails = emails.filter((e) => e.trim() !== "");
     if (validEmails.length === 0) {
       setMessage("Please enter at least one email address.");
+      return;
+    }
+
+    if (!name.trim()) {
+      setMessage("Please enter your name.");
       return;
     }
 
@@ -70,7 +78,9 @@ export default function InvitePage() {
       const data = await res.json();
       if (res.ok) {
         setMessage(`Invites sent successfully!`);
-        setJoinLink(`/call/${generatedRoomName}`);
+        setJoinLink(
+          `/call/${generatedRoomName}?name=${encodeURIComponent(name)}`
+        );
         setEmails([""]); // Reset form
       } else {
         setMessage(`Error: ${data.error}`);
@@ -95,6 +105,20 @@ export default function InvitePage() {
         </div>
 
         <form onSubmit={sendInvite} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Your Name
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+              placeholder="John Doe"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Invitee Emails

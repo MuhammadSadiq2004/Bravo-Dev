@@ -5,6 +5,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const room = searchParams.get('room');
   const identity = searchParams.get('identity');
+  const name = searchParams.get('name');
 
   if (!room || !identity) {
     return NextResponse.json({ error: 'Missing room or identity' }, { status: 400 });
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
   }
 
-  const at = new AccessToken(apiKey, apiSecret, { identity });
+  const at = new AccessToken(apiKey, apiSecret, { identity, name: name || identity });
   at.addGrant({ roomJoin: true, room: room });
 
   const token = await at.toJwt();
