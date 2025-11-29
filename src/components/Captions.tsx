@@ -43,11 +43,38 @@ export default function Captions() {
       try {
         const data = JSON.parse(str);
         if (data.type === 'caption') {
-          const translatedText = await translateText(data.text, targetLang);
+          const identity = participant?.identity || 'Unknown';
+          
+          // 1. Show original text immediately (for speed)
           setCaptions((prev) => {
-            const newCaps = [...prev, { identity: participant?.identity || 'Unknown', text: translatedText }];
-            return newCaps.slice(-3); // Keep last 3
+            const newCaps = [...prev];
+            // If the last caption is from the same user and is interim (we assume interim if we are updating it), replace it
+            // But since we don't track isFinal in state easily, we'll just append if it's a new final, or replace if it's interim.
+            // Simplified strategy: If the last caption is from this user, replace it.
+            if (newCaps.length > 0 && newCaps[newCaps.length - 1].identity === identity) {
+               newCaps[newCaps.length - 1].text = data.text;
+               return newCaps;
+            }
+            return [...prev, { identity, text: data.text }].slice(-3);
           });
+
+          // 2. If it's a final result, translate it in the background and update
+          if (data.isFinal && targetLang !== 'en') {
+             translateText(data.text, targetLang).then(translated => {
+                setCaptions((prev) => {
+                    const newCaps = [...prev];
+                    // Find the last caption from this user and update it
+                    // This is a bit loose but works for sequential speech
+                    for (let i = newCaps.length - 1; i >= 0; i--) {
+                        if (newCaps[i].identity === identity) {
+                            newCaps[i].text = translated;
+                            break;
+                        }
+                    }
+                    return [...newCaps];
+                });
+             });
+          }
         }
       } catch {
         // ignore non-json
@@ -91,35 +118,46 @@ export default function Captions() {
       const text = finalTranscript || interimTranscript;
       
       if (text.trim()) {
-        // 1. Show locally
-        // Only translate final results to avoid API spam
-        let displayText = text;
-        if (finalTranscript && targetLang !== 'en') {
-            displayText = await translateText(finalTranscript, targetLang);
-        }
-
+        // 1. Show locally immediately (Optimistic UI)
         setCaptions((prev) => {
-           // Only update if text is different to avoid flicker, or just append
-           // For simplicity, we just show the latest chunk
            const newCaps = [...prev];
-           // If the last caption is "Me" and it's interim, replace it
            if (newCaps.length > 0 && newCaps[newCaps.length - 1].identity === 'Me') {
-             newCaps[newCaps.length - 1].text = displayText;
+             newCaps[newCaps.length - 1].text = text;
              return newCaps;
            } else {
-             return [...prev, { identity: 'Me', text: displayText }].slice(-3);
+             return [...prev, { identity: 'Me', text: text }].slice(-3);
            }
         });
 
-        // 2. Broadcast to room (Only final results to reduce traffic)
-        // Broadcast ORIGINAL text so others can translate it to THEIR language
-        if (finalTranscript.trim() && room && room.localParticipant) {
-           const msg = JSON.stringify({ type: 'caption', text: finalTranscript });
+        // 2. If final, translate locally and update
+        if (finalTranscript && targetLang !== 'en') {
+            translateText(finalTranscript, targetLang).then(translated => {
+                setCaptions((prev) => {
+                    const newCaps = [...prev];
+                    if (newCaps.length > 0 && newCaps[newCaps.length - 1].identity === 'Me') {
+                        newCaps[newCaps.length - 1].text = translated;
+                    }
+                    return [...newCaps];
+                });
+            });
+        }
+
+        // 3. Broadcast to room
+        // Send BOTH interim and final results so others see it in real-time
+        if (room && room.localParticipant) {
+           const isFinal = !!finalTranscript;
+           const msg = JSON.stringify({ 
+               type: 'caption', 
+               text: text, 
+               isFinal: isFinal 
+           });
            const encoder = new TextEncoder();
-           room.localParticipant.publishData(encoder.encode(msg), { reliable: true });
+           room.localParticipant.publishData(encoder.encode(msg), { reliable: isFinal }); // Reliable only for final
 
            // Restart recognition to prevent freezing (common Web Speech API bug)
-           recognition.stop();
+           if (isFinal) {
+               recognition.stop();
+           }
         }
       }
     };
