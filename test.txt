@@ -1,1 +1,1 @@
-new test emoji deploy
+new test name deploy
